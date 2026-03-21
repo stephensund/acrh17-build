@@ -16,6 +16,9 @@ on:
         required: true
         default: "255.255.255.0"
 
+permissions:
+  contents: write
+
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -61,16 +64,16 @@ jobs:
         sed -i "s/option netmask.*/option netmask '${{ github.event.inputs.LAN_MASK }}'/g" package/base-files/files/bin/config_generate
 
         if grep -q "option dns" package/base-files/files/bin/config_generate; then
-            sed -i "s/option dns.*/option dns '192.168.2.1'/g" package/base-files/files/bin/config_generate
+            sed -i "s/option dns.*/option dns '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
         else
-            sed -i "/option gateway/a\ \toption dns '192.168.2.1'" package/base-files/files/bin/config_generate
+            sed -i "/option gateway/a\ \toption dns '${{ github.event.inputs.LAN_GATEWAY }}'" package/base-files/files/bin/config_generate
         fi
 
     - name: Build firmware (quiet mode)
       working-directory: immortalwrt
       run: |
         make defconfig --quiet
-        make -j2 --quiet
+        make -j2 --quiet           # << 这里按你的要求保留 j2
 
     - name: Prepare .bin only
       working-directory: immortalwrt/bin
@@ -78,11 +81,18 @@ jobs:
         mkdir output
         find . -type f -name "*.bin" -exec cp {} output/ \;
 
+    - name: Generate release tag
+      id: gentag
+      run: |
+        TAG=ACRH17-$(date +'%Y%m%d-%H%M')
+        echo "TAG=$TAG" >> $GITHUB_ENV
+        echo "Generated tag = $TAG"
+
     - name: Create Release (bin only)
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: "ACRH17-$(date +'%Y%m%d-%H%M')"
-        name: "ACRH17 Firmware $(date +'%Y-%m-%d %H:%M:%S')"
+        tag_name: ${{ env.TAG }}
+        name: ${{ env.TAG }}
         draft: false
         prerelease: false
         files: immortalwrt/bin/output/*
