@@ -20,6 +20,7 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
   CONFIG_FILE: .config
+  TZ: Asia/Shanghai
 
 jobs:
   build:
@@ -59,7 +60,6 @@ jobs:
         sed -i "s/option gateway.*/option gateway '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
         sed -i "s/option netmask.*/option netmask '${{ github.event.inputs.LAN_MASK }}'/g" package/base-files/files/bin/config_generate
 
-        # 修改或添加 DNS
         if grep -q "option dns" package/base-files/files/bin/config_generate; then
             sed -i "s/option dns.*/option dns '192.168.2.1'/g" package/base-files/files/bin/config_generate
         else
@@ -72,8 +72,19 @@ jobs:
         make defconfig --quiet
         make -j2 --quiet
 
-    - name: Upload compiled firmware
-      uses: actions/upload-artifact@v4
+    - name: Prepare .bin only
+      working-directory: immortalwrt/bin
+      run: |
+        mkdir output
+        find . -type f -name "*.bin" -exec cp {} output/ \;
+
+    - name: Create Release (bin only)
+      uses: softprops/action-gh-release@v1
       with:
-        name: firmware
-        path: immortalwrt/bin/
+        tag_name: "ACRH17-$(date +'%Y%m%d-%H%M')"
+        name: "ACRH17 Firmware $(date +'%Y-%m-%d %H:%M:%S')"
+        draft: false
+        prerelease: false
+        files: immortalwrt/bin/output/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
