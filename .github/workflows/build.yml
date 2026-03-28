@@ -30,71 +30,72 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout Repository
+    - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Install Build Dependencies
+    - name: Install build dependencies
       run: |
         sudo apt update -qq
-        sudo apt install -y build-essential gcc g++ git python3 unzip zlib1g-dev libncurses5-dev gawk gettext
+        sudo apt install -y build-essential gcc g++ git python3 unzip \
+          zlib1g-dev libncurses5-dev gawk gettext
 
-    - name: Clone ImmortalWrt source
+    - name: Clone ImmortalWrt
       run: |
-        git clone $REPO_URL -b $REPO_BRANCH immortalwrt
-        cp $CONFIG_FILE immortalwrt/.config
+        git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
+        cp ${CONFIG_FILE} immortalwrt/.config
 
-    - name: Clone KuCat Theme + Config
+    # ✅ 核心 1：加入 Passwall 主仓库 + 依赖仓库
+    - name: Add Passwall feeds
+      working-directory: immortalwrt
+      run: |
+        echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git" >> feeds.conf.default
+        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
+
+    # 皮肤（不影响 Passwall）
+    - name: Clone KuCat theme
       run: |
         cd immortalwrt/package
         git clone https://github.com/sirpdboy/luci-theme-kucat
         git clone https://github.com/sirpdboy/luci-app-kucat-config
 
-    - name: Update Feeds
+    - name: Update & install feeds
       working-directory: immortalwrt
       run: |
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Apply LAN IP modifications
+    # ✅ 核心 2：LAN 设置（最高优先级方式，永不失效）
+    - name: Inject LAN config
       working-directory: immortalwrt
       run: |
-        echo "Applying LAN settings..."
-        sed -i "s/option ipaddr.*/option ipaddr '${{ github.event.inputs.LAN_IP }}'/g" package/base-files/files/bin/config_generate
-        sed -i "s/option gateway.*/option gateway '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
-        sed -i "s/option netmask.*/option netmask '${{ github.event.inputs.LAN_MASK }}'/g" package/base-files/files/bin/config_generate
+        mkdir -p files/etc/config
+        cat > files/etc/config/network <<EOF
+        config interface 'lan'
+            option device 'br-lan'
+            option proto 'static'
+            option ipaddr '${{ github.event.inputs.LAN_IP }}'
+            option netmask '${{ github.event.inputs.LAN_MASK }}'
+            option gateway '${{ github.event.inputs.LAN_GATEWAY }}'
+            list dns '${{ github.event.inputs.LAN_GATEWAY }}'
+        EOF
 
-        if grep -q "option dns" package/base-files/files/bin/config_generate; then
-            sed -i "s/option dns.*/option dns '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
-        else
-            sed -i "/option gateway/a\ \toption dns '${{ github.event.inputs.LAN_GATEWAY }}'" package/base-files/files/bin/config_generate
-        fi
-
-    - name: Build firmware (quiet mode)
+    - name: Build firmware
       working-directory: immortalwrt
       run: |
-        make defconfig --quiet
-        make -j2 --quiet           # << 这里按你的要求保留 j2
+        make defconfig
+        make -j2 --quiet
 
-    - name: Prepare .bin only
+    - name: Collect firmware
       working-directory: immortalwrt/bin
       run: |
-        mkdir output
-        find . -type f -name "*.bin" -exec cp {} output/ \;
+        mkdir -p output
+        find . -name "*.bin" -exec cp {} output/ \;
 
-    - name: Generate release tag
-      id: gentag
-      run: |
-        TAG=ACRH17-$(date +'%Y%m%d-%H%M')
-        echo "TAG=$TAG" >> $GITHUB_ENV
-        echo "Generated tag = $TAG"
-
-    - name: Create Release (bin only)
+    - name: Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ env.TAG }}
-        name: ${{ env.TAG }}
-        draft: false
-        prerelease: false
+        tag_name: ACRH17-$(date +'%Y%m%d-%H%M')
+        name: ACRH17-$(date +'%Y%m%d-%H%M')
         files: immortalwrt/bin/output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
