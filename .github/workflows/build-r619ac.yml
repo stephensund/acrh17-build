@@ -44,7 +44,7 @@ jobs:
         git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
         cp ${CONFIG_FILE} immortalwrt/.config
 
-    # ✅ 关键 1：加入 Passwall 主仓库 + 依赖仓库
+    # ✅ Passwall 主仓库 + 依赖仓库
     - name: Add Passwall feeds
       working-directory: immortalwrt
       run: |
@@ -63,7 +63,7 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # ✅ 关键 2：LAN 设置使用 files/etc/config（稳定，不再改 config_generate）
+    # ✅ LAN 设置（稳定方式）
     - name: Inject LAN network config
       working-directory: immortalwrt
       run: |
@@ -82,7 +82,7 @@ jobs:
       working-directory: immortalwrt
       run: |
         make defconfig
-        make -j2   # ✅ 按你要求固定 j2
+        make -j2 --quiet
 
     - name: Prepare .bin only
       working-directory: immortalwrt/bin
@@ -103,4 +103,3 @@ jobs:
         files: immortalwrt/bin/output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-``
