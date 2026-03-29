@@ -36,12 +36,20 @@ jobs:
     - name: Install Build Dependencies
       run: |
         sudo apt update -qq
-        sudo apt install -y build-essential gcc g++ git python3 unzip zlib1g-dev libncurses5-dev gawk gettext
+        sudo apt install -y build-essential gcc g++ git python3 unzip \
+          zlib1g-dev libncurses5-dev gawk gettext
 
     - name: Clone ImmortalWrt source
       run: |
-        git clone $REPO_URL -b $REPO_BRANCH immortalwrt
-        cp $CONFIG_FILE immortalwrt/.config
+        git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
+        cp ${CONFIG_FILE} immortalwrt/.config
+
+    # ✅ 关键 1：加入 Passwall 主仓库 + 依赖仓库
+    - name: Add Passwall feeds
+      working-directory: immortalwrt
+      run: |
+        echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git" >> feeds.conf.default
+        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
 
     - name: Clone KuCat Theme + Config
       run: |
@@ -55,45 +63,44 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Apply LAN IP modifications
+    # ✅ 关键 2：LAN 设置使用 files/etc/config（稳定，不再改 config_generate）
+    - name: Inject LAN network config
       working-directory: immortalwrt
       run: |
-        sed -i "s/option ipaddr.*/option ipaddr '${{ github.event.inputs.LAN_IP }}'/g" package/base-files/files/bin/config_generate
-        sed -i "s/option gateway.*/option gateway '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
-        sed -i "s/option netmask.*/option netmask '${{ github.event.inputs.LAN_MASK }}'/g" package/base-files/files/bin/config_generate
+        mkdir -p files/etc/config
+        cat > files/etc/config/network <<EOF
+        config interface 'lan'
+            option device 'br-lan'
+            option proto 'static'
+            option ipaddr '${{ github.event.inputs.LAN_IP }}'
+            option netmask '${{ github.event.inputs.LAN_MASK }}'
+            option gateway '${{ github.event.inputs.LAN_GATEWAY }}'
+            list dns '${{ github.event.inputs.LAN_GATEWAY }}'
+        EOF
 
-        if grep -q "option dns" package/base-files/files/bin/config_generate; then
-            sed -i "s/option dns.*/option dns '${{ github.event.inputs.LAN_GATEWAY }}'/g" package/base-files/files/bin/config_generate
-        else
-            sed -i "/option gateway/a\ \toption dns '${{ github.event.inputs.LAN_GATEWAY }}'" package/base-files/files/bin/config_generate
-        fi
-
-    - name: Build firmware (quiet mode)
+    - name: Build firmware
       working-directory: immortalwrt
       run: |
-        make defconfig --quiet
-        make -j2 --quiet   # 按你要求锁定 j2，不改动
+        make defconfig
+        make -j2   # ✅ 按你要求固定 j2
 
     - name: Prepare .bin only
       working-directory: immortalwrt/bin
       run: |
-        mkdir output
+        mkdir -p output
         find . -type f -name "*.bin" -exec cp {} output/ \;
 
     - name: Generate release tag
-      id: gentag
       run: |
         TAG=R619AC-$(date +'%Y%m%d-%H%M')
         echo "TAG=$TAG" >> $GITHUB_ENV
-        echo "Generated tag = $TAG"
 
     - name: Create Release (bin only)
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ env.TAG }}
         name: ${{ env.TAG }}
-        draft: false
-        prerelease: false
         files: immortalwrt/bin/output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+``
