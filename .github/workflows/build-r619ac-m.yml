@@ -31,7 +31,7 @@ jobs:
         git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
         cp ${CONFIG_FILE} immortalwrt/.config
 
-    # ✅ 关键 1：加入 Passwall 主仓库 + 依赖仓库
+    # ✅ Passwall 主仓库 + 依赖仓库
     - name: Add Passwall feeds
       working-directory: immortalwrt
       run: |
@@ -50,8 +50,8 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # ✅ 关键 2：主路由 LAN 配置（最高优先级方式）
-    # 只固定 IP，不覆盖 gateway / dns / mask
+    # ✅ 主路由 LAN 配置（最高优先级）
+    # 只固定 IP，不覆盖 gateway / dns / netmask
     - name: Inject MAIN router LAN config
       working-directory: immortalwrt
       run: |
@@ -67,7 +67,7 @@ jobs:
       working-directory: immortalwrt
       run: |
         make defconfig --quiet
-        make -j2 --quiet   # ✅ 按你要求固定 j2
+        make -j2 --quiet
 
     - name: Prepare .bin only
       working-directory: immortalwrt/bin
