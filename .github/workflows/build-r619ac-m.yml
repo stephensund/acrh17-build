@@ -23,12 +23,20 @@ jobs:
     - name: Install Build Dependencies
       run: |
         sudo apt update -qq
-        sudo apt install -y build-essential gcc g++ git python3 unzip zlib1g-dev libncurses5-dev gawk gettext
+        sudo apt install -y build-essential gcc g++ git python3 unzip \
+          zlib1g-dev libncurses5-dev gawk gettext
 
     - name: Clone ImmortalWrt source
       run: |
-        git clone $REPO_URL -b $REPO_BRANCH immortalwrt
-        cp $CONFIG_FILE immortalwrt/.config
+        git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
+        cp ${CONFIG_FILE} immortalwrt/.config
+
+    # ✅ 关键 1：加入 Passwall 主仓库 + 依赖仓库
+    - name: Add Passwall feeds
+      working-directory: immortalwrt
+      run: |
+        echo "src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall.git" >> feeds.conf.default
+        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git" >> feeds.conf.default
 
     - name: Clone KuCat Theme + Config
       run: |
@@ -42,43 +50,41 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Apply LAN IP (Main Router)
+    # ✅ 关键 2：主路由 LAN 配置（最高优先级方式）
+    # 只固定 IP，不覆盖 gateway / dns / mask
+    - name: Inject MAIN router LAN config
       working-directory: immortalwrt
       run: |
-        echo "Applying MAIN ROUTER LAN IP..."
-        sed -i "s/option ipaddr.*/option ipaddr '192.168.2.1'/g" package/base-files/files/bin/config_generate
-
-        # 不覆盖 gateway
-        # 不覆盖 dns
-        # 不覆盖 netmask
-        echo "Skip gateway/dns/mask modification for main router."
+        mkdir -p files/etc/config
+        cat > files/etc/config/network <<EOF
+        config interface 'lan'
+            option device 'br-lan'
+            option proto 'static'
+            option ipaddr '192.168.2.1'
+        EOF
 
     - name: Build firmware (quiet mode)
       working-directory: immortalwrt
       run: |
         make defconfig --quiet
-        make -j2 --quiet    # 固定 j2，按你要求
+        make -j2 --quiet   # ✅ 按你要求固定 j2
 
     - name: Prepare .bin only
       working-directory: immortalwrt/bin
       run: |
-        mkdir output
+        mkdir -p output
         find . -type f -name "*.bin" -exec cp {} output/ \;
 
     - name: Generate release tag
-      id: gentag
       run: |
         TAG=R619AC-MAIN-$(date +'%Y%m%d-%H%M')
         echo "TAG=$TAG" >> $GITHUB_ENV
-        echo "Generated tag = $TAG"
 
     - name: Create Release (bin only)
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ env.TAG }}
         name: ${{ env.TAG }}
-        draft: false
-        prerelease: false
         files: immortalwrt/bin/output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
