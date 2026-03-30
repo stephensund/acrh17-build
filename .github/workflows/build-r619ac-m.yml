@@ -10,6 +10,7 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
   CONFIG_FILE: .config-r619ac
+  TAG_PREFIX: R619AC-MAIN
   TZ: Asia/Shanghai
 
 jobs:
@@ -75,9 +76,10 @@ jobs:
         mkdir -p output
         find . -type f -name "*.bin" -exec cp {} output/ \;
 
+    # ✅ 统一、正确、不会翻车的 Tag 生成
     - name: Generate release tag
       run: |
-        TAG=R619AC-MAIN-$(date +'%Y%m%d-%H%M')
+        TAG=${TAG_PREFIX}-$(date +'%Y%m%d-%H%M')
         echo "TAG=$TAG" >> $GITHUB_ENV
 
     - name: Create Release (bin only)
