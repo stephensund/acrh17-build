@@ -23,6 +23,7 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
   CONFIG_FILE: .config
+  TAG_PREFIX: ACRH17
   TZ: Asia/Shanghai
 
 jobs:
@@ -44,7 +45,7 @@ jobs:
         git clone ${REPO_URL} -b ${REPO_BRANCH} immortalwrt
         cp ${CONFIG_FILE} immortalwrt/.config
 
-    # ✅ 核心 1：加入 Passwall 主仓库 + 依赖仓库
+    # ✅ Passwall 主仓库 + 依赖仓库
     - name: Add Passwall feeds
       working-directory: immortalwrt
       run: |
@@ -64,7 +65,7 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    # ✅ 核心 2：LAN 设置（最高优先级方式，永不失效）
+    # ✅ LAN 设置（最高优先级，不会被覆盖）
     - name: Inject LAN config
       working-directory: immortalwrt
       run: |
@@ -91,11 +92,17 @@ jobs:
         mkdir -p output
         find . -name "*.bin" -exec cp {} output/ \;
 
-    - name: Release
+    # ✅ 统一且唯一正确的 Tag 生成方式
+    - name: Generate release tag
+      run: |
+        TAG=${TAG_PREFIX}-$(date +'%Y%m%d-%H%M')
+        echo "TAG=$TAG" >> $GITHUB_ENV
+
+    - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ACRH17-$(date +'%Y%m%d-%H%M')
-        name: ACRH17-$(date +'%Y%m%d-%H%M')
+        tag_name: ${{ env.TAG }}
+        name: ${{ env.TAG }}
         files: immortalwrt/bin/output/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
